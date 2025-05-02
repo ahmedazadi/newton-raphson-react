@@ -5,7 +5,8 @@ import { Input } from "./components/ui/input";
 import Plot from "react-plotly.js";
 import "katex/dist/katex.min.css";
 import { BlockMath } from "react-katex";
-import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, ChevronRight, ChevronLeft } from "lucide-react";
+import { Slider } from "./components/ui/slider";
 
 function App() {
   const [expression, setExpression] = useState("x^2 - 2");
@@ -23,6 +24,7 @@ function App() {
     { iteration: number; x: number; fx: number; error: number }[]
   >([]);
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(-1);
+  const [convergenceWarning, setConvergenceWarning] = useState(false);
 
   const generateData = useCallback(() => {
     const xValues = [];
@@ -63,11 +65,32 @@ function App() {
     const iterationSteps = [];
     const tol = parseFloat(tolerance);
     const max = parseInt(maxIterations);
-    const derivativeExpr = derivative(expression, "x").toString();
+    const firstDerivativeExpr = derivative(expression, "x").toString();
+    const secondDerivativeExpr = derivative(
+      derivative(expression, "x"),
+      "x"
+    ).toString();
+
+    try {
+      const fx = evaluate(expression, { x });
+      const f1x = evaluate(firstDerivativeExpr, { x });
+      const f2x = evaluate(secondDerivativeExpr, { x });
+      const convergenceFactor = Math.abs((fx * f2x) / (f1x * f1x));
+
+      if (convergenceFactor >= 1 || isNaN(convergenceFactor)) {
+        setConvergenceWarning(true);
+        return; // Stop here — don't continue if not converging
+      } else {
+        setConvergenceWarning(false);
+      }
+    } catch {
+      setConvergenceWarning(true);
+      return; // Also stop if something errors out
+    }
 
     for (let iteration = 0; iteration < max; iteration++) {
       const fx = evaluate(expression, { x });
-      const dfx = evaluate(derivativeExpr, { x });
+      const dfx = evaluate(firstDerivativeExpr, { x });
       const error = Math.abs(fx);
 
       iterationSteps.push({ iteration, x, fx, error });
@@ -162,6 +185,12 @@ function App() {
     ];
   };
 
+  function getPrecisionFromTolerance(tol: string): number {
+    const num = parseFloat(tol);
+    if (isNaN(num) || num <= 0) return 2;
+    return Math.max(0, -Math.floor(Math.log10(num)));
+  }
+
   return (
     <div className="min-h-screen pb-24 p-8 bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white flex flex-col items-center gap-8">
       <h1 className="text-3xl font-bold">Newton-Raphson Method</h1>
@@ -224,6 +253,12 @@ function App() {
         </div>
       )}
 
+      {convergenceWarning && (
+        <div className="bg-yellow-100 dark:bg-yellow-900 text-red-700 dark:text-red-300 border border-red-400 rounded px-4 py-2 text-sm max-w-xl text-center">
+          ⚠️ This function may not converge with the given starting guess.
+        </div>
+      )}
+
       <div className="w-full max-w-6xl flex flex-col md:flex-col lg:flex-row gap-8 items-center">
         {data && root !== null && (
           <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-center  ">
@@ -249,7 +284,13 @@ function App() {
 
             {/* table */}
             <div className="flex-1 w-full overflow-auto max-h-[400px] border-y">
-              <BlockMath math={`\\text{Root found: } x = ${root.toFixed(6)}`} />
+              <BlockMath
+                math={
+                  root !== null
+                    ? `\\text{Root found: } x = ${root.toFixed(6)}`
+                    : `\\text{Did not converge to a root}`
+                }
+              />
               <table className="w-full text-left border-collapse mt-4">
                 <thead>
                   <tr>
@@ -270,12 +311,16 @@ function App() {
                       }
                     >
                       <td className="border-b p-2">{1 + step.iteration}</td>
-                      <td className="border-b p-2">{step.x.toFixed(6)}</td>
                       <td className="border-b p-2">
-                        {step.fx.toExponential(2)}
+                        {step.x.toFixed(getPrecisionFromTolerance(tolerance))}
                       </td>
                       <td className="border-b p-2">
-                        {step.error.toExponential(2)}
+                        {step.fx.toFixed(getPrecisionFromTolerance(tolerance))}
+                      </td>
+                      <td className="border-b p-2">
+                        {step.error.toFixed(
+                          getPrecisionFromTolerance(tolerance)
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -288,16 +333,20 @@ function App() {
 
       {/* bottom section */}
       {steps.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 px-6 py-3 flex items-center justify-between z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 px-6 py-3 flex items-center justify-center z-50">
           <div className="flex gap-4 items-center">
             <button
+              className="hover:opacity-50"
               onClick={() => setCurrentStepIndex((i) => Math.max(i - 1, 0))}
               disabled={currentStepIndex <= 0}
             >
-              <SkipBack className="w-6 h-6" />
+              <ChevronLeft className="w-6 h-6" />
             </button>
 
-            <button onClick={() => setIsPlaying(!isPlaying)}>
+            <button
+              className="hover:opacity-50"
+              onClick={() => setIsPlaying(!isPlaying)}
+            >
               {isPlaying ? (
                 <Pause className="w-6 h-6" />
               ) : (
@@ -306,25 +355,29 @@ function App() {
             </button>
 
             <button
+              className="hover:opacity-50"
               onClick={() =>
                 setCurrentStepIndex((i) => Math.min(i + 1, steps.length - 1))
               }
               disabled={currentStepIndex >= steps.length - 1}
             >
-              <SkipForward className="w-6 h-6" />
+              <ChevronRight className="w-6 h-6" />
             </button>
           </div>
 
-          <input
-            type="range"
+          <Slider
             min={0}
             max={steps.length - 1}
-            value={currentStepIndex}
-            onChange={(e) => setCurrentStepIndex(Number(e.target.value))}
+            step={1}
+            value={[currentStepIndex]}
+            onValueChange={([value]) => {
+              setIsPlaying(false);
+              setCurrentStepIndex(value);
+            }}
             className="w-full max-w-xl mx-6"
           />
 
-          <span className="text-sm font-mono">
+          <span className="text-sm w-fit whitespace-nowrap font-mono">
             Step {currentStepIndex + 1} / {steps.length}
           </span>
         </div>
