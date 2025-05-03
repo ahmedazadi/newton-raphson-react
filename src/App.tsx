@@ -9,12 +9,12 @@ import { Play, Pause, ChevronRight, ChevronLeft } from "lucide-react";
 import { Slider } from "./components/ui/slider";
 
 function App() {
-  const [justCalculated, setJustCalculated] = useState(false);
   const [expression, setExpression] = useState("x^2 - 2");
   const [startingGuess, setStartingGuess] = useState("1");
   const [tolerance, setTolerance] = useState("0.000001");
   const [maxIterations, setMaxIterations] = useState("20");
   const [isPlaying, setIsPlaying] = useState(true);
+  const [calculated, setCalculated] = useState(false);
   const [data, setData] = useState<{
     xValues: number[];
     yValues: number[];
@@ -38,7 +38,6 @@ function App() {
 
     try {
       const derivativeExpr = derivative(expression, "x").toString();
-
       for (let x = center - range; x <= center + range; x += step) {
         try {
           const y = evaluate(expression, { x });
@@ -62,8 +61,7 @@ function App() {
   }, [expression, startingGuess]);
 
   const calculateNewtonRaphson = useCallback(() => {
-    setJustCalculated(true);
-
+    setCalculated(true);
     let x = parseFloat(startingGuess);
     const iterationSteps = [];
     const tol = parseFloat(tolerance);
@@ -82,13 +80,13 @@ function App() {
 
       if (convergenceFactor >= 1 || isNaN(convergenceFactor)) {
         setConvergenceWarning(true);
-        return; // Stop here — don't continue if not converging
+        return;
       } else {
         setConvergenceWarning(false);
       }
     } catch {
       setConvergenceWarning(true);
-      return; // Also stop if something errors out
+      return;
     }
 
     for (let iteration = 0; iteration < max; iteration++) {
@@ -99,10 +97,7 @@ function App() {
       iterationSteps.push({ iteration, x, fx, error });
 
       if (error < tol) break;
-      if (dfx === 0) {
-        console.error("Zero derivative — Newton-Raphson fails.");
-        break;
-      }
+      if (dfx === 0) break;
 
       x = x - fx / dfx;
     }
@@ -116,17 +111,15 @@ function App() {
   useEffect(() => {
     if (
       isPlaying &&
-      justCalculated &&
       currentStepIndex >= 0 &&
       currentStepIndex < steps.length - 1
     ) {
       const timer = setTimeout(() => {
         setCurrentStepIndex((prev) => prev + 1);
-        setJustCalculated(false); // prevent auto-play from triggering again
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, currentStepIndex, steps.length, justCalculated]);
+  }, [isPlaying, currentStepIndex, steps.length]);
 
   const getStepData = () => {
     if (currentStepIndex < 0 || currentStepIndex >= steps.length) return [];
@@ -213,7 +206,10 @@ function App() {
           <Input
             id="expression"
             value={expression}
-            onChange={(e) => setExpression(e.target.value)}
+            onChange={(e) => {
+              setExpression(e.target.value);
+              setCalculated(false);
+            }}
             placeholder="x^2 - 2"
           />
         </div>
@@ -222,7 +218,10 @@ function App() {
           <Input
             id="guess"
             value={startingGuess}
-            onChange={(e) => setStartingGuess(e.target.value)}
+            onChange={(e) => {
+              setStartingGuess(e.target.value);
+              setCalculated(false);
+            }}
             placeholder="1"
           />
         </div>
@@ -231,7 +230,10 @@ function App() {
           <Input
             id="tolerance"
             value={tolerance}
-            onChange={(e) => setTolerance(e.target.value)}
+            onChange={(e) => {
+              setTolerance(e.target.value);
+              setCalculated(false);
+            }}
             placeholder="0.000001"
           />
         </div>
@@ -240,7 +242,10 @@ function App() {
           <Input
             id="maxIterations"
             value={maxIterations}
-            onChange={(e) => setMaxIterations(e.target.value)}
+            onChange={(e) => {
+              setMaxIterations(e.target.value);
+              setCalculated(false);
+            }}
             placeholder="20"
           />
         </div>
@@ -249,7 +254,7 @@ function App() {
         </div>
       </form>
 
-      {data && (
+      {calculated && data && (
         <div className="text-center space-y-2">
           <BlockMath math={`f(x) = ${expression}`} />
           <BlockMath
@@ -258,86 +263,79 @@ function App() {
         </div>
       )}
 
-      {convergenceWarning && (
+      {calculated && convergenceWarning && (
         <div className="bg-yellow-100 dark:bg-yellow-900 text-red-700 dark:text-red-300 border border-red-400 rounded px-4 py-2 text-sm max-w-xl text-center">
           ⚠️ This function may not converge with the given starting guess.
         </div>
       )}
 
-      <div className="w-full max-w-6xl flex flex-col md:flex-col lg:flex-row gap-8 items-center">
-        {data && root !== null && (
-          <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-center  ">
-            {/* graph */}
-            <div className="flex-1 w-full">
-              <Plot
-                data={getStepData() as Partial<Plotly.Data>[]}
-                layout={{
-                  title: `Newton-Raphson Iteration ${
-                    currentStepIndex >= 0 ? currentStepIndex + 1 : ""
-                  }`,
-                  xaxis: { title: "x" },
-                  yaxis: { title: "y" },
-                  autosize: true,
-                  paper_bgcolor: "transparent",
-                  plot_bgcolor: "transparent",
-                  transition: { duration: 500, easing: "cubic-in-out" },
-                }}
-                config={{ responsive: true, displayModeBar: false }}
-                style={{ width: "100%", height: "500px" }}
-              />
-            </div>
-
-            {/* table */}
-            <div className="flex-1 w-full overflow-auto max-h-[400px] border-y">
-              <BlockMath
-                math={
-                  root !== null
-                    ? `\\text{Root found: } x = ${root.toFixed(6)}`
-                    : `\\text{Did not converge to a root}`
-                }
-              />
-              <table className="w-full text-left border-collapse mt-4">
-                <thead>
-                  <tr>
-                    <th className="border-b p-2">Iteration</th>
-                    <th className="border-b p-2">x</th>
-                    <th className="border-b p-2">f(x)</th>
-                    <th className="border-b p-2">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {steps.map((step) => (
-                    <tr
-                      key={step.iteration}
-                      className={
-                        step.iteration === currentStepIndex
-                          ? "bg-yellow-100 dark:bg-yellow-900"
-                          : ""
-                      }
-                    >
-                      <td className="border-b p-2">{1 + step.iteration}</td>
-                      <td className="border-b p-2">
-                        {step.x.toFixed(getPrecisionFromTolerance(tolerance))}
-                      </td>
-                      <td className="border-b p-2">
-                        {step.fx.toFixed(getPrecisionFromTolerance(tolerance))}
-                      </td>
-                      <td className="border-b p-2">
-                        {step.error.toFixed(
-                          getPrecisionFromTolerance(tolerance)
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {calculated && data && root !== null && (
+        <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-8 items-center">
+          <div className="flex-1 w-full">
+            <Plot
+              data={getStepData() as Partial<Plotly.Data>[]}
+              layout={{
+                title: `Newton-Raphson Iteration ${
+                  currentStepIndex >= 0 ? currentStepIndex + 1 : ""
+                }`,
+                xaxis: { title: "x" },
+                yaxis: { title: "y" },
+                autosize: true,
+                paper_bgcolor: "transparent",
+                plot_bgcolor: "transparent",
+                transition: { duration: 500, easing: "cubic-in-out" },
+              }}
+              config={{ responsive: true, displayModeBar: false }}
+              style={{ width: "100%", height: "500px" }}
+            />
           </div>
-        )}
-      </div>
 
-      {/* bottom section */}
-      {steps.length > 0 && (
+          <div className="flex-1 w-full overflow-auto max-h-[400px] border-y">
+            <BlockMath
+              math={
+                root !== null
+                  ? `\\text{Root found: } x = ${root.toFixed(6)}`
+                  : `\\text{Did not converge to a root}`
+              }
+            />
+            <table className="w-full text-left border-collapse mt-4">
+              <thead>
+                <tr>
+                  <th className="border-b p-2">Iteration</th>
+                  <th className="border-b p-2">x</th>
+                  <th className="border-b p-2">f(x)</th>
+                  <th className="border-b p-2">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {steps.map((step) => (
+                  <tr
+                    key={step.iteration}
+                    className={
+                      step.iteration === currentStepIndex
+                        ? "bg-yellow-100 dark:bg-yellow-900"
+                        : ""
+                    }
+                  >
+                    <td className="border-b p-2">{1 + step.iteration}</td>
+                    <td className="border-b p-2">
+                      {step.x.toFixed(getPrecisionFromTolerance(tolerance))}
+                    </td>
+                    <td className="border-b p-2">
+                      {step.fx.toFixed(getPrecisionFromTolerance(tolerance))}
+                    </td>
+                    <td className="border-b p-2">
+                      {step.error.toFixed(getPrecisionFromTolerance(tolerance))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {calculated && steps.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 px-6 py-3 flex items-center justify-center z-50">
           <div className="flex gap-4 items-center">
             <button
