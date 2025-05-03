@@ -9,6 +9,7 @@ import { Play, Pause, ChevronRight, ChevronLeft } from "lucide-react";
 import { Slider } from "./components/ui/slider";
 
 function App() {
+  const [justCalculated, setJustCalculated] = useState(false);
   const [expression, setExpression] = useState("x^2 - 2");
   const [startingGuess, setStartingGuess] = useState("1");
   const [tolerance, setTolerance] = useState("0.000001");
@@ -61,6 +62,8 @@ function App() {
   }, [expression, startingGuess]);
 
   const calculateNewtonRaphson = useCallback(() => {
+    setJustCalculated(true);
+
     let x = parseFloat(startingGuess);
     const iterationSteps = [];
     const tol = parseFloat(tolerance);
@@ -113,15 +116,17 @@ function App() {
   useEffect(() => {
     if (
       isPlaying &&
+      justCalculated &&
       currentStepIndex >= 0 &&
       currentStepIndex < steps.length - 1
     ) {
       const timer = setTimeout(() => {
         setCurrentStepIndex((prev) => prev + 1);
+        setJustCalculated(false); // prevent auto-play from triggering again
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, currentStepIndex, steps.length]);
+  }, [isPlaying, currentStepIndex, steps.length, justCalculated]);
 
   const getStepData = () => {
     if (currentStepIndex < 0 || currentStepIndex >= steps.length) return [];
